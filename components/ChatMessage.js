@@ -17,13 +17,15 @@ class ChatMessage extends Component {
       whiteSpace: "pre-wrap",
     };
     return (
-      <div className={containerClassName}>
-        <div className={messageBoxClassName} style={messageBoxStyles}>
-          <span className="message-text" style={messageStyles}>
-            {message}
-          </span>
-        </div>
-      </div>
+<div className={`w-100 my-1 d-flex${justify ? ' justify-content-end' : ''}`}>
+  <div className="bg-light rounded border border-gray p-2" style={messageBoxStyles}>
+    <span className={`d-block secondary ${align}`} style={messageStyles}>
+      {message}
+    </span>
+  </div>
+</div>
+
+
     );
   }
 }

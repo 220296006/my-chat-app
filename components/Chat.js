@@ -1,54 +1,94 @@
 import { Component, Fragment } from "react";
-import axios from "axios";
-import Pusher from "pusher-js";
-import ChatMessage from './ChatMessage';
+import Sentiment from "sentiment";
+import ChatMessage from "./ChatMessage";
+import { initializeApp} from "firebase/app";
+import { getDatabase, ref, push, set, onValue, get } from "firebase/database";
 
 const SAD_EMOJI = [55357, 56864];
 const HAPPY_EMOJI = [55357, 56832];
 const NEUTRAL_EMOJI = [55357, 56848];
 
+const firebaseConfig = {
+  apiKey: "AIzaSyBLF-niHPCsUF3gmSsCSq4OCU10WMVI7uI",
+  authDomain: "my-chat-app-ae081.firebaseapp.com",
+  projectId: "my-chat-app-ae081",
+  storageBucket: "my-chat-app-ae081.appspot.com",
+  messagingSenderId: "605903191360",
+  appId: "1:605903191360:web:906d519c41e11400becea5",
+  measurementId: "G-PQQLPK3V0T",
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const messagesRef = ref(db, 'messages');
+
+
 class Chat extends Component {
   state = { chats: [] };
 
   componentDidMount() {
-    this.pusher = new Pusher(process.env.PUSHER_APP_KEY, {
-      cluster: process.env.PUSHER_APP_CLUSTER,
-      encrypted: true,
-    });
-    this.channel = this.pusher.subscribe("chat-room");
-    this.channel.bind("new-message", ({ chat = null }) => {
-      const { chats } = this.state;
-      chat && chats.push(chat);
-      this.setState({ chats });
-    });
-    this.pusher.connection.bind("connected", () => {
-      axios.post("/messages").then((response) => {
-        const chats = response.data.messages;
-        this.setState({ chats });
-      });
+    this.retrieveMessages((messages) => {
+      this.setState({ chats: messages });
     });
   }
+
   componentWillUnmount() {
-    if (this.pusher) {
-      try {
-        this.pusher.disconnect();
-      } catch (error) {
-        console.error("Error disconnecting Pusher:", error);
-      }
-    }
+  
   }
 
   handleKeyUp = (evt) => {
     const value = evt.target.value;
     if (evt.keyCode === 13 && !evt.shiftKey) {
       const { activeUser: user } = this.props;
-      const chat = { user, message: value, timestamp: +new Date() };
+      const chat = { user, message: value, timestamp: new Date().getTime() };
       evt.target.value = "";
-      axios.post("/message", chat);
+      this.saveChatMessageToFirebase(db, chat);
     }
   };
 
+  // You can add functions to interact with Firebase Firestore
+  async retrieveMessages(callback) {
+    onValue(messagesRef, (snapshot) => {
+      const messages = [];
+      if (snapshot.exists()) {
+        // Iterate over the child nodes
+        snapshot.forEach((childSnapshot) => {
+          messages.push(childSnapshot.val());
+        });
+      }
+      callback(messages);
+    });
+  }
+  
+
+// ...
+
+async saveChatMessageToFirebase(db, chat) {
+  try {
+    const newMessageRef = push(messagesRef); // Create a new reference in the Realtime Database
+    set(newMessageRef, chat); // Set the chat message at the reference
+  } catch (error) {
+    console.error("Error adding document: ", error);
+  }
+}
+
+// ...
+
+
+  // You can add functions to send chat messages to Firebase Firestore
+  async sendMessage(user, message) {
+    const newMessageRef = push(messagesRef);
+    set(newMessageRef, {
+      user: user,
+      message: message,
+      timestamp: new Date().getTime(),
+    });
+  }
+
+  // Your render function
   render() {
+    // Render code here
     return (
       this.props.activeUser && (
         <Fragment>
@@ -59,7 +99,7 @@ class Chat extends Component {
               {this.props.activeUser}
             </h2>
           </div>
-     <div className="px-4 pb-4 w-100 d-flex flex-row flex-wrap align-items-start align-content-start position-relative" style={{ height: 'calc(100% - 180px)', overflowY: 'scroll' }}>
+          <div className="px-4 pb-4 w-100 d-flex flex-row flex-wrap align-items-start align-content-start position-relative" style={{ height: 'calc(100% - 180px)', overflowY: 'scroll' }}>
             {this.state.chats.map((chat, index) => {
               const previous = Math.max(0, index - 1);
               const previousChat = this.state.chats[previous];

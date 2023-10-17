@@ -3,13 +3,12 @@ const { parse } = require("url");
 const next = require("next");
 const express = require("express");
 const bodyParser = require("body-parser");
+const cors = require("cors");
 const { initializeApp } = require("firebase/app");
-const { getFirestore } = require("firebase/firestore");
-const { getAuth } = require("firebase/auth");
+const { getFirestore, collection, getDocs, addDoc } = require("firebase/firestore");
 const Sentiment = require("sentiment");
 
 const dev = process.env.NODE_ENV !== "production";
-const handler = app.getRequestHandler();
 const port = process.env.PORT || 3000;
 const sentiment = new Sentiment();
 
@@ -23,21 +22,48 @@ const firebaseConfig = {
   measurementId: "G-PQQLPK3V0T",
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+const initializeFirebase = () => {
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  return { app, db };
+};
 
 const server = express();
 server.use(cors());
 server.use(bodyParser.json());
 server.use(bodyParser.urlencoded({ extended: true }));
 
-server.get("*", (req, res) => {
-  return handler(req, res);
+const { app, db } = initializeFirebase();
+
+server.get("*", async (req, res) => {
+  const { path } = parse(req.url, true);
+  if (path === "/messages") {
+    // Get chat messages from Firebase (Firestore)
+    const chatMessages = [];
+    const querySnapshot = await getDocs(collection(db, "chatMessages"));
+    querySnapshot.forEach((doc) => {
+      chatMessages.push(doc.data());
+    });
+    return res.json({ messages: chatMessages });
+  } else {
+    return app.render(req, res);
+  }
 });
 
-// Define your routes and API endpoints here
+server.post("/message", async (req, res) => {
+  const chat = req.body;
+  chat.timestamp = +new Date();
+  chat.sentiment = sentiment.analyze(chat.message).score;
+
+  try {
+    // Save chat message to Firebase (Firestore)
+    const docRef = await addDoc(collection(db, "chatMessages"), chat);
+    res.status(200).json({ message: "Message saved successfully!" });
+  } catch (error) {
+    console.error("Error saving chat message:", error);
+    res.status(500).json({ error: "Failed to save the message." });
+  }
+});
 
 server.listen(port, (err) => {
   if (err) throw err;
