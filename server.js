@@ -35,37 +35,42 @@ server.use(bodyParser.urlencoded({ extended: true }));
 
 const { app, db } = initializeFirebase();
 
-server.get("*", async (req, res) => {
-  const { path } = parse(req.url, true);
-  if (path === "/messages") {
-    // Get chat messages from Firebase (Firestore)
-    const chatMessages = [];
-    const querySnapshot = await getDocs(collection(db, "chatMessages"));
-    querySnapshot.forEach((doc) => {
-      chatMessages.push(doc.data());
-    });
-    return res.json({ messages: chatMessages });
-  } else {
-    return app.render(req, res);
-  }
-});
+const nextApp = next({ dev });
+const handle = nextApp.getRequestHandler();
 
-server.post("/message", async (req, res) => {
-  const chat = req.body;
-  chat.timestamp = +new Date();
-  chat.sentiment = sentiment.analyze(chat.message).score;
+nextApp.prepare().then(() => {
+  server.get("*", async (req, res) => {
+    const { path } = parse(req.url, true);
+    if (path === "/messages") {
+      // Get chat messages from Firebase (Firestore)
+      const chatMessages = [];
+      const querySnapshot = await getDocs(collection(db, "chatMessages"));
+      querySnapshot.forEach((doc) => {
+        chatMessages.push(doc.data());
+      });
+      return res.json({ messages: chatMessages });
+    } else {
+      return handle(req, res);
+    }
+  });
 
-  try {
-    // Save chat message to Firebase (Firestore)
-    const docRef = await addDoc(collection(db, "chatMessages"), chat);
-    res.status(200).json({ message: "Message saved successfully!" });
-  } catch (error) {
-    console.error("Error saving chat message:", error);
-    res.status(500).json({ error: "Failed to save the message." });
-  }
-});
+  server.post("/message", async (req, res) => {
+    const chat = req.body;
+    chat.timestamp = +new Date();
+    chat.sentiment = sentiment.analyze(chat.message).score;
 
-server.listen(port, (err) => {
-  if (err) throw err;
-  console.log(`> Ready on http://localhost:${port}`);
+    try {
+      // Save chat message to Firebase (Firestore)
+      const docRef = await addDoc(collection(db, "chatMessages"), chat);
+      res.status(200).json({ message: "Message saved successfully!" });
+    } catch (error) {
+      console.error("Error saving chat message:", error);
+      res.status(500).json({ error: "Failed to save the message." });
+    }
+  });
+
+  server.listen(port, (err) => {
+    if (err) throw err;
+    console.log(`> Ready on http://localhost:${port}`);
+  });
 });
